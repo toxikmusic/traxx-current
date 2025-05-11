@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Traxx - Status Check</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 2rem;
+      background-color: #f9f9f9;
+      color: #333;
+    }
+    h1 {
+      color: #2563eb;
+      margin-bottom: 1rem;
+    }
+    .card {
+      background-color: white;
+      border-radius: 8px;
+      padding: 1.5rem;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+      margin-bottom: 1.5rem;
+    }
+    pre {
+      background-color: #f0f0f0;
+      padding: 1rem;
+      border-radius: 4px;
+      overflow-x: auto;
+    }
+    button {
+      background-color: #2563eb;
+      color: white;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1rem;
+    }
+    button:hover {
+      background-color: #1d4ed8;
+    }
+    .status {
+      display: flex;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+    .status-indicator {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-right: 8px;
+    }
+    .status-ok {
+      background-color: #22c55e;
+    }
+    .status-warning {
+      background-color: #f59e0b;
+    }
+    .status-error {
+      background-color: #ef4444;
+    }
+    #api-response {
+      margin-top: 1.5rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>Traxx - Status Check</h1>
+  
+  <div class="card">
+    <div class="status">
+      <div id="server-status-indicator" class="status-indicator status-warning"></div>
+      <h2>Server Status</h2>
+    </div>
+    <p id="server-status">Checking server status...</p>
+    <button id="check-server">Check Server</button>
+  </div>
+  
+  <div class="card">
+    <div class="status">
+      <div id="host-status-indicator" class="status-indicator status-warning"></div>
+      <h2>Host Configuration</h2>
+    </div>
+    <p id="host-status">Checking host configuration...</p>
+    <div id="host-details">
+      <p><strong>Current Host:</strong> <span id="current-host">Detecting...</span></p>
+      <p><strong>Environment:</strong> <span id="environment">Detecting...</span></p>
+    </div>
+  </div>
+  
+  <div class="card">
+    <h2>API Response</h2>
+    <pre id="api-response">No data yet. Click "Check Server" to test the API.</pre>
+  </div>
+  
+  <script>
+    // Get DOM elements
+    const serverStatusIndicator = document.getElementById('server-status-indicator');
+    const serverStatus = document.getElementById('server-status');
+    const hostStatusIndicator = document.getElementById('host-status-indicator');
+    const hostStatus = document.getElementById('host-status');
+    const currentHost = document.getElementById('current-host');
+    const environment = document.getElementById('environment');
+    const apiResponse = document.getElementById('api-response');
+    const checkServerButton = document.getElementById('check-server');
+    
+    // Update status indicators
+    function updateStatus(element, status, message) {
+      if (status === 'ok') {
+        element.className = 'status-indicator status-ok';
+      } else if (status === 'warning') {
+        element.className = 'status-indicator status-warning';
+      } else {
+        element.className = 'status-indicator status-error';
+      }
+      return message;
+    }
+    
+    // Check server status
+    async function checkServer() {
+      try {
+        serverStatus.textContent = 'Connecting to server...';
+        apiResponse.textContent = 'Requesting data...';
+        
+        const response = await fetch('/api/health-check');
+        if (!response.ok) {
+          throw new Error(`HTTP error: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        apiResponse.textContent = JSON.stringify(data, null, 2);
+        serverStatus.textContent = updateStatus(serverStatusIndicator, 'ok', 'Server is running correctly');
+        
+        return true;
+      } catch (error) {
+        console.error('Error checking server:', error);
+        serverStatus.textContent = updateStatus(serverStatusIndicator, 'error', `Failed to connect to server: ${error.message}`);
+        apiResponse.textContent = `Error: ${error.message}`;
+        return false;
+      }
+    }
+    
+    // Check host configuration
+    function checkHost() {
+      try {
+        // Get current host
+        currentHost.textContent = window.location.hostname || 'localhost';
+        
+        // Detect environment
+        const isReplit = window.location.hostname.includes('replit') || 
+                        window.location.hostname.includes('repl.co');
+        environment.textContent = isReplit ? 'Replit' : 'Local or Other';
+        
+        if (isReplit) {
+          hostStatus.textContent = updateStatus(hostStatusIndicator, 'ok', 'Running in Replit environment');
+        } else {
+          hostStatus.textContent = updateStatus(hostStatusIndicator, 'warning', 'Not running in Replit environment');
+        }
+      } catch (error) {
+        console.error('Error checking host:', error);
+        hostStatus.textContent = updateStatus(hostStatusIndicator, 'error', `Error checking host: ${error.message}`);
+      }
+    }
+    
+    // Add event listeners
+    checkServerButton.addEventListener('click', checkServer);
+    
+    // Initial checks
+    checkHost();
+    checkServer();
+  </script>
+</body>
+</html>

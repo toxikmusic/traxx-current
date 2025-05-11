@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            line-height: 1.6;
+        }
+        #status {
+            font-weight: bold;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+        .connected {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .connecting {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        #messages {
+            border: 1px solid #ddd;
+            padding: 10px;
+            height: 200px;
+            overflow-y: auto;
+            margin-bottom: 10px;
+            background-color: #f8f9fa;
+        }
+        button {
+            padding: 5px 10px;
+            margin-right: 5px;
+        }
+        input {
+            padding: 5px;
+            width: 300px;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebSocket Test Page</h1>
+    
+    <div id="status" class="disconnected">Status: Disconnected</div>
+    
+    <div>
+        <p>Connection URL: <span id="wsUrl"></span></p>
+        <p>Environment Information:</p>
+        <ul>
+            <li>Window Location: <span id="windowLocation"></span></li>
+            <li>Protocol: <span id="protocol"></span></li>
+            <li>Hostname: <span id="hostname"></span></li>
+            <li>Port: <span id="port"></span></li>
+        </ul>
+    </div>
+    
+    <div>
+        <button id="connectBtn">Connect</button>
+        <button id="disconnectBtn" disabled>Disconnect</button>
+    </div>
+    
+    <div>
+        <h3>Send Message</h3>
+        <input type="text" id="messageInput" placeholder="Type a message..." disabled>
+        <button id="sendBtn" disabled>Send</button>
+    </div>
+    
+    <div>
+        <h3>Messages</h3>
+        <div id="messages"></div>
+    </div>
+    
+    <script>
+        // DOM elements
+        const statusElem = document.getElementById('status');
+        const messagesElem = document.getElementById('messages');
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const messageInput = document.getElementById('messageInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const wsUrlElem = document.getElementById('wsUrl');
+        const windowLocationElem = document.getElementById('windowLocation');
+        const protocolElem = document.getElementById('protocol');
+        const hostnameElem = document.getElementById('hostname');
+        const portElem = document.getElementById('port');
+        
+        // WebSocket instance
+        let socket = null;
+        
+        // Display environment information
+        windowLocationElem.textContent = window.location.href;
+        protocolElem.textContent = window.location.protocol;
+        hostnameElem.textContent = window.location.hostname;
+        portElem.textContent = window.location.port || '(default)';
+        
+        // Get the appropriate WebSocket URL based on the current environment
+        function getWebSocketUrl() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const host = window.location.host;
+            const isReplit = 
+                window.location.hostname.includes('.replit.dev') || 
+                window.location.hostname.includes('.repl.co') ||
+                window.location.hostname.includes('.replit.app') ||
+                window.location.hostname.includes('.kirk.replit.dev');
+            
+            let wsUrl;
+            
+            // For Replit, we use port 5000 which is where our server is running
+            if (isReplit) {
+                const hostParts = window.location.hostname.split(':');
+                wsUrl = `${protocol}//${hostParts[0]}:5000/ws`;
+            } else {
+                wsUrl = `${protocol}//${host}/ws`;
+            }
+            
+            wsUrlElem.textContent = wsUrl;
+            return wsUrl;
+        }
+        
+        // Add message to the log
+        function addMessage(message, type = 'info') {
+            const msgElem = document.createElement('div');
+            msgElem.style.color = type === 'error' ? 'red' : type === 'sent' ? 'blue' : 'black';
+            msgElem.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            messagesElem.appendChild(msgElem);
+            messagesElem.scrollTop = messagesElem.scrollHeight;
+        }
+        
+        // Update connection status
+        function updateStatus(status) {
+            statusElem.textContent = `Status: ${status}`;
+            statusElem.className = status.toLowerCase();
+            
+            if (status === 'Connected') {
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+                messageInput.disabled = false;
+                sendBtn.disabled = false;
+            } else if (status === 'Connecting') {
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = true;
+                messageInput.disabled = true;
+                sendBtn.disabled = true;
+                statusElem.className = 'connecting';
+            } else {
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+                messageInput.disabled = true;
+                sendBtn.disabled = true;
+                statusElem.className = 'disconnected';
+            }
+        }
+        
+        // Connect to WebSocket
+        function connect() {
+            if (socket) {
+                socket.close();
+            }
+            
+            updateStatus('Connecting');
+            addMessage('Connecting to WebSocket...');
+            
+            try {
+                const wsUrl = getWebSocketUrl();
+                socket = new WebSocket(wsUrl);
+                
+                socket.addEventListener('open', (event) => {
+                    updateStatus('Connected');
+                    addMessage('Connection established!');
+                });
+                
+                socket.addEventListener('message', (event) => {
+                    addMessage(`Received: ${event.data}`);
+                    
+                    try {
+                        const data = JSON.parse(event.data);
+                        if (data && data.type) {
+                            addMessage(`Message type: ${data.type}`);
+                        }
+                    } catch (e) {
+                        // Not a JSON message, that's fine
+                    }
+                });
+                
+                socket.addEventListener('close', (event) => {
+                    updateStatus('Disconnected');
+                    addMessage(`Connection closed: ${event.code} ${event.reason || ''}`);
+                });
+                
+                socket.addEventListener('error', (event) => {
+                    updateStatus('Error');
+                    addMessage('WebSocket error occurred', 'error');
+                    console.error('WebSocket error:', event);
+                });
+            } catch (error) {
+                updateStatus('Error');
+                addMessage(`Failed to create WebSocket: ${error.message}`, 'error');
+                console.error('Error creating WebSocket:', error);
+            }
+        }
+        
+        // Disconnect WebSocket
+        function disconnect() {
+            if (socket) {
+                socket.close();
+                socket = null;
+                addMessage('Manually disconnected');
+            }
+        }
+        
+        // Send message
+        function sendMessage() {
+            const message = messageInput.value;
+            if (message && socket && socket.readyState === WebSocket.OPEN) {
+                try {
+                    // Try to send as JSON
+                    const jsonMsg = JSON.stringify({
+                        type: 'message',
+                        text: message,
+                        timestamp: new Date().toISOString()
+                    });
+                    socket.send(jsonMsg);
+                    addMessage(`Sent: ${jsonMsg}`, 'sent');
+                    messageInput.value = '';
+                } catch (error) {
+                    addMessage(`Error sending message: ${error.message}`, 'error');
+                }
+            }
+        }
+        
+        // Event listeners
+        connectBtn.addEventListener('click', connect);
+        disconnectBtn.addEventListener('click', disconnect);
+        sendBtn.addEventListener('click', sendMessage);
+        
+        messageInput.addEventListener('keypress', (event) => {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        });
+        
+        // Initialize WebSocket URL display
+        getWebSocketUrl();
+    </script>
+</body>
+</html>
