@@ -789,7 +789,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const privateStreamKey = generateStreamKey(userId);
       
       // Generate a public stream ID (for viewers to access the stream)
-      const publicStreamId = generatePublicStreamId();
+      const publicStreamId = generatePublicStreamId(privateStreamKey);
       
       // Add to the WebRTC streams map with both IDs
       webrtcActiveStreams.set(publicStreamId, { 
@@ -1064,7 +1064,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const privateStreamKey = generateStreamKey(req.user?.id);
       
       // Generate a public stream ID (for viewers to access the stream)
-      const publicStreamId = generatePublicStreamId();
+      const publicStreamId = generatePublicStreamId(privateStreamKey);
       
       // Create stream with the current user
       const newStream = await storage.createStream({

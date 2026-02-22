@@ -7,7 +7,7 @@ import {
   FormLabel, 
   FormMessage 
 } from "@/components/ui/form";
-import { PostType, PostTypeValues } from "@/shared/schema";
+import { PostType, PostTypeValues } from "@shared/schema";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";

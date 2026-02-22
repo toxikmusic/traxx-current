@@ -32,7 +32,6 @@ export default defineConfig({
     },
     hmr: {
       clientPort: process.env.VITE_HMR_CLIENT_PORT ? Number(process.env.VITE_HMR_CLIENT_PORT) : undefined,
-      host: true,
       overlay: false,
     },
     watch: {
