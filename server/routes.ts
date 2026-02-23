@@ -113,7 +113,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Serve static files from the uploads directory
   app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
-  
+
+  // Upload endpoints for files
+  app.post("/api/uploads/audio", upload.single("audio"), (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "No audio file provided" });
+      }
+      const fileUrl = `/uploads/${req.file.filename}`;
+      const duration = 180; // Mock duration
+      res.status(201).json({ 
+        url: fileUrl, 
+        originalName: req.file.originalname,
+        size: req.file.size,
+        duration: duration
+      });
+    } catch (error) {
+      console.error("Audio upload error:", error);
+      res.status(500).json({ message: "Error uploading audio file" });
+    }
+  });
+
+  app.post("/api/upload/image", upload.single("image"), (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "No image file provided" });
+      }
+      const fileUrl = `/uploads/${req.file.filename}`;
+      res.status(201).json({ 
+        url: fileUrl, 
+        originalName: req.file.originalname,
+        size: req.file.size
+      });
+    } catch (error) {
+      console.error("Image upload error:", error);
+      res.status(500).json({ message: "Error uploading image file" });
+    }
+  });
+
+  // Track creation endpoint
+  app.post("/api/tracks", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    try {
+      const trackData = insertTrackSchema.parse({
+        ...req.body,
+        userId: req.user?.id
+      });
+      const track = await storage.createTrack(trackData);
+      res.status(201).json(track);
+    } catch (error) {
+      console.error("Error creating track:", error);
+      res.status(400).json({ message: "Invalid track data", error });
+    }
+  });
+
+  app.get("/api/genres", async (req, res) => {
+    try {
+      const genres = await storage.getGenres();
+      res.json(genres);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch genres" });
+    }
+  });
+
   // Add middleware for streaming content from object storage
   app.use(objectStorage.serveContent.bind(objectStorage));
 

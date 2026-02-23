@@ -67,7 +67,7 @@ export default function UploadTrackPage() {
     mutationFn: async (file: File) => {
       const formData = new FormData();
       formData.append("audio", file);
-      const res = await fetch("/api/upload/audio", {
+      const res = await fetch("/api/uploads/audio", {
         method: "POST",
         body: formData,
       });
