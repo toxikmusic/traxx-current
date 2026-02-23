@@ -178,12 +178,23 @@ export function setupAuth(app: Express) {
 
       const hashedPassword = await hashPassword(password);
       const user = await storage.createUser({
-        ...req.body,
+        username,
         password: hashedPassword,
+        email,
+        displayName: req.body.displayName || username,
+        bio: req.body.bio || "",
+        profileImageUrl: req.body.profileImageUrl || "",
+        isStreaming: false
+      });
+
+      // Update verification fields separately if needed, or ensure storage.createUser handles them
+      // For now, let's assume storage.createUser might be limited by the InsertUser type
+      // If we need to set verification fields, we can update the user after creation
+      await storage.updateUser(user.id, {
         isVerified: false,
         verificationToken,
         verificationTokenExpiry
-      });
+      } as any);
 
       await sendVerificationEmail(email, verificationToken);
 
