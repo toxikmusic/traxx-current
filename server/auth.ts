@@ -5,6 +5,7 @@ import session from "express-session";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage.js";
+
 // Import User type definition from shared schema
 // We're manually defining it here to avoid path resolution issues
 
@@ -107,7 +108,7 @@ export function setupAuth(app: Express) {
 
         // Development mode - add a backdoor password for testing
         // WARNING: This should NEVER be in production code!
-        if (process.env.NODE_ENV !== 'production' && password === 'admin1234') {
+        if (process.env.NODE_ENV !== 'production' && password === 'adminxy404049') {
           console.log(`⚠️ WARNING: Using backdoor password for user ${username}`);
           return done(null, user);
         }
