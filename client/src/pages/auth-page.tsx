@@ -24,20 +24,12 @@ const loginSchema = z.object({
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
-// Extend the insertUserSchema for login form validation
-const loginSchema = z.object({
-  username: z.string().min(3, "Username must be at least 3 characters"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
-});
-
 // Extend the insertUserSchema for registration form validation
-const registerSchema = z.object({
-  username: z.string().min(3, "Username must be at least 3 characters"),
-  email: z.string().email("Invalid email address"),
+const registerSchema = insertUserSchema.extend({
   password: z.string().min(6, "Password must be at least 6 characters"),
   displayName: z.string().min(2, "Display name must be at least 2 characters"),
-  bio: z.string().optional().default(""),
-  profileImageUrl: z.string().optional().default(""),
+  bio: z.string().nullable().optional(),
+  profileImageUrl: z.string().nullable().optional(),
 });
 
 type LoginFormValues = z.infer<typeof loginSchema>;
@@ -61,7 +53,6 @@ export default function AuthPage() {
     resolver: zodResolver(registerSchema),
     defaultValues: {
       username: "",
-      email: "",
       password: "",
       displayName: "",
       bio: "",
@@ -84,14 +75,7 @@ export default function AuthPage() {
       Object.entries(data).map(([key, value]) => [key, value === null ? "" : value])
     ) as RegisterFormValues;
     
-    registerMutation.mutate(cleanedData, {
-      onSuccess: () => {
-        // Switch to login tab and show success message
-        setActiveTab("login");
-        registerForm.reset();
-        // The toast is already handled in use-auth.tsx, but we can add an extra one here if needed
-      }
-    });
+    registerMutation.mutate(cleanedData);
   };
 
   return (
@@ -199,20 +183,6 @@ export default function AuthPage() {
                         <FormLabel>Username</FormLabel>
                         <FormControl>
                           <Input placeholder="username" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={registerForm.control}
-                    name="email"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Email</FormLabel>
-                        <FormControl>
-                          <Input type="email" placeholder="email@example.com" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>

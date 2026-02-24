@@ -96,12 +96,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw error;
       }
     },
-    onSuccess: (user: any) => {
-      console.log("Registration successful, NOT setting user data to prevent auto-login");
-      // queryClient.setQueryData(["/api/user"], user); // Removed to prevent auto-login
+    onSuccess: (user: Omit<SelectUser, "password">) => {
+      console.log("Setting user data in queryClient cache after registration");
+      queryClient.setQueryData(["/api/user"], user);
       toast({
         title: "Registration successful",
-        description: user.message || `Account created successfully! Please log in with your credentials.`,
+        description: `Welcome to Traxx, ${user.displayName}!`,
       });
     },
     onError: (error: Error) => {

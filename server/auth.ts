@@ -184,41 +184,36 @@ export function setupAuth(app: Express) {
         displayName: req.body.displayName || username,
         bio: req.body.bio || "",
         profileImageUrl: req.body.profileImageUrl || "",
-        isStreaming: false,
+        isStreaming: false
+      });
+
+      // Update verification fields separately if needed, or ensure storage.createUser handles them
+      // For now, let's assume storage.createUser might be limited by the InsertUser type
+      // If we need to set verification fields, we can update the user after creation
+      await storage.updateUser(user.id, {
         isVerified: false,
         verificationToken,
-        verificationTokenExpiry,
-        followerCount: 0,
-        createdAt: new Date()
+        verificationTokenExpiry
       } as any);
-
-      // Try to create default user settings for the new user
-      try {
-        await storage.createUserSettings({
-          userId: user.id,
-          uiColor: "#7c3aed", // Default purple theme
-          enableAutoplay: true,
-          defaultSortType: "recent",
-          highContrastMode: false
-        });
-      } catch (settingsError) {
-        console.error("Failed to create user settings, but continuing registration:", settingsError);
-      }
 
       await sendVerificationEmail(email, verificationToken);
 
-      // Instead of req.login, we just send a success response
-      // This prevents auto-login after registration
-      const userWithoutPassword = { ...user as any };
-      delete userWithoutPassword.password;
-      
-      res.status(201).json({
-        ...userWithoutPassword,
-        message: "Registration successful. Please log in."
+      // Automatically create default user settings for the new user
+      await storage.createUserSettings({
+        userId: user.id,
+        uiColor: "#7c3aed", // Default purple theme
+        enableAutoplay: true,
+        defaultSortType: "recent"
       });
-    } catch (error: any) {
-      console.error("Registration error:", error);
-      res.status(500).json({ error: error.message || "Internal server error during registration" });
+
+      req.login(user, (err) => {
+        if (err) return next(err);
+        // Send user without password
+        const { password, ...userWithoutPassword } = user;
+        res.status(201).json(userWithoutPassword);
+      });
+    } catch (error) {
+      next(error);
     }
   });
 
