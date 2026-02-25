@@ -10,7 +10,7 @@ export default function Sidebar() {
   //  { id: 1, username: "dj_vibe", displayName: "DJ Vibe", profileImageUrl: "", isStreaming: true },
  //   { id: 2, username: "music_lover", displayName: "Music Lover", profileImageUrl: "", isStreaming: false },
   //  { id: 3, username: "beatmaker", displayName: "Beat Maker", profileImageUrl: "", isStreaming: false },
-  ];
+  // ];
   
   const genres = [
     { id: 1, name: "Electronic" },
