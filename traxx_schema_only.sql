@@ -139,7 +139,9 @@ CREATE TABLE public.likes (
     user_id integer NOT NULL,
     content_id integer NOT NULL,
     content_type text NOT NULL,
-    created_at timestamp without time zone DEFAULT now()
+    created_at timestamp without time zone
+    CONSTRAINT unique_user_post_like UNIQUE (user_id, post_id)
+    DEFAULT now()
 );
 
 

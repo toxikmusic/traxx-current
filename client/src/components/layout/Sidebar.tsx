@@ -6,10 +6,10 @@ import { User, Genre } from "@shared/schema";
 
 export default function Sidebar() {
   // Mock data for initial render
-  const followedChannels = [
-    { id: 1, username: "dj_vibe", displayName: "DJ Vibe", profileImageUrl: "", isStreaming: true },
-    { id: 2, username: "music_lover", displayName: "Music Lover", profileImageUrl: "", isStreaming: false },
-    { id: 3, username: "beatmaker", displayName: "Beat Maker", profileImageUrl: "", isStreaming: false },
+  // const followedChannels = [
+  //  { id: 1, username: "dj_vibe", displayName: "DJ Vibe", profileImageUrl: "", isStreaming: true },
+ //   { id: 2, username: "music_lover", displayName: "Music Lover", profileImageUrl: "", isStreaming: false },
+  //  { id: 3, username: "beatmaker", displayName: "Beat Maker", profileImageUrl: "", isStreaming: false },
   ];
   
   const genres = [
@@ -22,12 +22,12 @@ export default function Sidebar() {
 
   const { data: channelsData, isLoading: channelsLoading } = useQuery<User[]>({
     queryKey: ['/api/channels/followed'],
-    enabled: false // Disable for now, we'll use mock data
+    enabled: true // Disable for now, we'll use mock data
   });
 
   const { data: genresData, isLoading: genresLoading } = useQuery<Genre[]>({
     queryKey: ['/api/genres'],
-    enabled: false // Disable for now, we'll use mock data
+    enabled: true // Disable for now, we'll use mock data
   });
 
   const channels = channelsData || followedChannels;
