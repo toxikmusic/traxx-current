@@ -6,13 +6,11 @@ import { User, Genre } from "@shared/schema";
 
 export default function Sidebar() {
   // Mock data for initial render
-  //const followedChannels: [
-
-  
-  //  { id: 1, username: "dj_vibe", displayName: "DJ Vibe", profileImageUrl: "", isStreaming: true },
- //   { id: 2, username: "music_lover", displayName: "Music Lover", profileImageUrl: "", isStreaming: false },
-  //  { id: 3, username: "beatmaker", displayName: "Beat Maker", profileImageUrl: "", isStreaming: false },
- // ];
+  const followedChannels = [
+   { id: 1, username: "dj_vibe", displayName: "DJ Vibe", profileImageUrl: "", isStreaming: true },
+ { id: 2, username: "music_lover", displayName: "Music Lover", profileImageUrl: "", isStreaming: false },
+{ id: 3, username: "beatmaker", displayName: "Beat Maker", profileImageUrl: "", isStreaming: false }
+    ];
   
   const genres = [
     { id: 1, name: "Electronic" },
@@ -32,7 +30,7 @@ export default function Sidebar() {
     enabled: true // Disable for now, we'll use mock data
   });
 
-  const channels = channelsData;
+  const channels = channelsData || followedChannels;
   const genreList = genresData || genres;
 
   return (

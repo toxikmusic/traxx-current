@@ -15,7 +15,7 @@ import {
   type PostTypeValues,
   type InsertUser,
   type Stream
-} from "../shared/schema.js";
+} from "../shared/schema.ts";
 import { 
   generateStreamKey, 
   validateStreamKey, 
@@ -54,10 +54,10 @@ if (!fs.existsSync(uploadsDir)) {
 
 // Configure multer for file uploads
 const storage_ = multer.diskStorage({
-  destination: function(req, file, cb) {
+  destination: function(_req, _file, cb) {
     cb(null, uploadsDir)
   },
-  filename: function(req, file, cb) {
+  filename: function(_req, _file, cb) {
     // Use original filename with timestamp to avoid collisions
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9)
     const ext = path.extname(file.originalname)
