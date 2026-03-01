@@ -41,7 +41,7 @@ export default function SharePage() {
     // We would typically fetch content data here based on type and ID
     // For now, we'll use the parameters directly
     setContentData({
-      title: params.get('title') || 'Content on BeatStream',
+      title: params.get('title') || 'Content on Traxx',
       description: params.get('description') || '',
       url: window.location.origin + params.get('returnUrl') || '/',
       type: type,
@@ -55,7 +55,7 @@ export default function SharePage() {
   const shareToSocial = (platform: string) => {
     if (!contentData) return;
     
-    const shareText = `Check out this ${contentData.type} on BeatStream: ${contentData.title}`;
+    const shareText = `Check out this ${contentData.type} on Traxx: ${contentData.title}`;
     const encodedText = encodeURIComponent(shareText);
     const encodedUrl = encodeURIComponent(contentData.url);
     

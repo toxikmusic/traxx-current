@@ -41,3 +41,6 @@ externalPort = 3000
 deploymentTarget = "cloudrun"
 publicDir = "dist/public"
 run = ["sh", "-c", "npm run start"]
+
+[objectStorage]
+defaultBucketID = "replit-objstore-20957a5b-c2b2-448a-97cf-ca44bd98eb09"

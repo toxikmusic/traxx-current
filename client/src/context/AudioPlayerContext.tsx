@@ -31,7 +31,7 @@ interface AudioPlayerContextType {
 }
 
 // This key will be used for saving player state in localStorage
-const PLAYER_STATE_KEY = "beatstream_player_state";
+const PLAYER_STATE_KEY = "traxx_player_state";
 
 const AudioPlayerContext = createContext<AudioPlayerContextType | undefined>(undefined);
 
@@ -130,7 +130,7 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       // Load volume first as it's always needed
-      const savedVolume = localStorage.getItem("beatstream_volume");
+      const savedVolume = localStorage.getItem("traxx_volume");
       if (savedVolume) {
         const parsedVolume = parseInt(savedVolume);
         setVolume(parsedVolume);
@@ -205,7 +205,7 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   
   // Save volume separately when it changes
   useEffect(() => {
-    localStorage.setItem("beatstream_volume", volume.toString());
+    localStorage.setItem("traxx_volume", volume.toString());
     
     // Update audio volume
     if (audioRef.current) {

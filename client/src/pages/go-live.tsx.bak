@@ -592,7 +592,7 @@ export default function GoLivePage() {
                       <h3 className="text-sm font-medium">Stream URL</h3>
                       <div className="mt-1 flex">
                         <Input 
-                          value="rtmp://beatstream.live/live" 
+                          value="rtmp://traxx.live/live" 
                           readOnly 
                           className="font-mono text-xs"
                         />

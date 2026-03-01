@@ -1,6 +1,6 @@
 /**
  * Audio Streaming Service
- * Handles audio capture, processing, and streaming for the BeatStream platform
+ * Handles audio capture, processing, and streaming for the Traxx platform
  */
 
 export interface AudioStreamSettings {

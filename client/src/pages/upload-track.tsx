@@ -194,7 +194,7 @@ export default function UploadTrackPage() {
       <div className="mb-8 space-y-2">
         <h1 className="text-3xl font-bold tracking-tight">Upload Track</h1>
         <p className="text-muted-foreground">
-          Share your music with the BeatStream community
+          Share your music with the Traxx community
         </p>
       </div>
 

@@ -667,7 +667,7 @@ export default function SettingsPage() {
             <CardHeader>
               <CardTitle>Playback Settings</CardTitle>
               <CardDescription>
-                Control how tracks and streams play on BeatStream
+                Control how tracks and streams play on Traxx
               </CardDescription>
             </CardHeader>
             <CardContent>

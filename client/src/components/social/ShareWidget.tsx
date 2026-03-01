@@ -45,7 +45,7 @@ export default function ShareWidget({
   const fullUrl = url.startsWith('http') ? url : `${window.location.origin}${url}`;
   
   // Prepare sharing text based on content type
-  const shareText = `Check out this ${type === 'track' ? 'track' : type === 'stream' ? 'live stream' : 'post'} on BeatStream: ${title}`;
+  const shareText = `Check out this ${type === 'track' ? 'track' : type === 'stream' ? 'live stream' : 'post'} on Traxx: ${title}`;
   const encodedText = encodeURIComponent(shareText);
   const encodedUrl = encodeURIComponent(fullUrl);
   

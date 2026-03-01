@@ -16,4 +16,4 @@ cp -r dist/client/* dist/public/
 # Start the production server
 echo "Starting production server..."
 PORT=5000
-NODE_ENV=production node dist/index.js
+tsx server/index.ts

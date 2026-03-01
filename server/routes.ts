@@ -32,7 +32,7 @@ import { checkCloudflareService } from './services/cloudflare.js';
 import { log } from "./vite.js";
 import { Server as SocketIOServer } from "socket.io";
 import { WebSocketServer, WebSocket } from "ws";
-import { db } from "./db.js";
+import { db } from "./db.ts";
 import { v4 as uuidv4 } from "uuid";
 import {
   handleMasterPlaylist,
@@ -54,10 +54,10 @@ if (!fs.existsSync(uploadsDir)) {
 
 // Configure multer for file uploads
 const storage_ = multer.diskStorage({
-  destination: function(_req, _file, cb) {
+  destination: function(_req, file, cb) {
     cb(null, uploadsDir)
   },
-  filename: function(_req, _file, cb) {
+  filename: function(_req, file, cb) {
     // Use original filename with timestamp to avoid collisions
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9)
     const ext = path.extname(file.originalname)

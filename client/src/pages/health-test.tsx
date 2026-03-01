@@ -291,7 +291,7 @@ export default function HealthTestPage() {
           <Separator className="my-6" />
 
           <div className="text-sm text-gray-600 dark:text-gray-400">
-            <p>This page directly tests the health endpoints of BeatStream's backend services.</p>
+            <p>This page directly tests the health endpoints of Traxx backend services.</p>
             <ul className="list-disc list-inside mt-2 space-y-1">
               <li>Basic Health: <code>/api/health</code> - Shows basic system status</li>
               <li>Detailed Health: <code>/api/health/detailed</code> - Shows detailed system status with services</li>
