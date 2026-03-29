@@ -1,6 +1,6 @@
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { registerSchema } from './schemas'; // Assuming this schema exists
+import { User } from '@shared/schema'; // Assuming this schema exists
 import { useState } from 'react';
 
 interface RegisterFormValues {
@@ -15,7 +15,7 @@ interface RegisterFormValues {
 
 const MyComponent = () => {
   const registerForm = useForm<RegisterFormValues>({
-    resolver: zodResolver(registerSchema),
+    resolver: zodResolver(User),
     defaultValues: {
       username: "",
       email: "", // Added email field

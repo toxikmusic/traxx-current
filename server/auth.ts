@@ -1,10 +1,16 @@
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
-import { Express } from "express";
+import express from "express"; 
 import session from "express-session";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage.js";
+import { z } from "zod";
+import bcrypt from "bcrypt";
+import { db } from "./db.js";
+import { users } from "../shared/schema.js";
+
+const router = express.Router();
 
 // Import User type definition from shared schema
 // We're manually defining it here to avoid path resolution issues
@@ -358,3 +364,30 @@ export function setupAuth(app: Express) {
     res.json(userWithoutPassword);
   });
 }
+// Validation schema
+const registerSchema = z.object({
+  name: z.string().min(2),
+  email: z.string().email(),
+  password: z.string().min(6)
+});
+
+router.post("/register", async (req, res) => {
+  try {
+    const parsed = registerSchema.parse(req.body);
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(parsed.password, 10);
+
+    // Insert user
+    await db.insert(users).values({
+      name: parsed.name,
+      email: parsed.email,
+      password: hashedPassword
+    });
+
+    res.status(201).json({ message: "User registered successfully" });
+
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});

@@ -27,12 +27,12 @@ import { setupAuth } from "./auth.js";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-import crypto from "crypto";
+import bcrypt from "bcrypt";
 import { checkCloudflareService } from './services/cloudflare.js';
 import { log } from "./vite.js";
 import { Server as SocketIOServer } from "socket.io";
 import { WebSocketServer, WebSocket } from "ws";
-import { db } from "./db.ts";
+import { db } from "../db.ts";
 import { v4 as uuidv4 } from "uuid";
 import {
   handleMasterPlaylist,
