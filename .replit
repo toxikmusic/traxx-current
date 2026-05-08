@@ -38,7 +38,6 @@ externalPort = 3000
 
 [deployment]
 deploymentTarget = "cloudrun"
-publicDir = "dist/public"
 run = ["sh", "-c", "npm run start"]
 
 [objectStorage]
