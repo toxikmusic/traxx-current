@@ -197,6 +197,22 @@ export async function endStream(streamId: number): Promise<{ success: boolean }>
   });
 }
 
+// Regenerate the private stream key + public share ID for a stream.
+// Owner-only on the server. Old key and share link stop working immediately.
+export async function regenerateStreamKey(streamId: number): Promise<{
+  success: boolean;
+  streamKey: string;
+  privateStreamKey: string;
+  externalStreamId: string;
+  publicStreamId: string;
+  shareUrl: string;
+  message?: string;
+}> {
+  return await apiRequest(`/api/streams/${streamId}/regenerate-key`, {
+    method: "POST",
+  });
+}
+
 // HLS Specific APIs
 
 // Create an HLS stream

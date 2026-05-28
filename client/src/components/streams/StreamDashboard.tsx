@@ -5,8 +5,20 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Copy, CheckCircle, Key, Share2, Globe, Users, Clock, Shield, MessageCircle, Send, Play, Radio } from "lucide-react";
+import { Copy, CheckCircle, Key, Share2, Globe, Users, Clock, Shield, MessageCircle, Send, Play, Radio, RefreshCw, Eye, EyeOff } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { regenerateStreamKey } from "@/lib/api";
 import { User } from "@shared/schema";
 import { useLocation } from "wouter";
 import { io, Socket } from 'socket.io-client';
@@ -60,35 +72,20 @@ export default function StreamDashboard({
   console.log("StreamDashboard key inputs:", { streamKey, privateStreamKey });
   console.log("StreamDashboard ID inputs:", { externalStreamId, publicStreamId });
   
-  const effectiveStreamKey = (() => {
-    // Check all possible sources for the stream key
-    // Log every possible source for debugging
-    console.log("Stream key sources:", {
-      streamKey: streamKey || "[empty]",
-      privateStreamKey: privateStreamKey || "[empty]"
-    });
-    
-    // Use first non-empty value (don't return N/A)
-    const key = privateStreamKey || streamKey || "";
-    console.log("Selected effective stream key:", key);
-    return key;
-  })();
-  
-  const effectiveStreamId = (() => {
-    // Check all possible sources for the stream ID
-    // Log every possible source for debugging
-    console.log("Stream ID sources:", {
-      externalStreamId: externalStreamId || "[empty]",
-      publicStreamId: publicStreamId || "[empty]"
-    });
-    
-    // Use first non-empty value (don't return N/A)
-    const id = publicStreamId || externalStreamId || "";
-    console.log("Selected effective stream ID:", id);
-    return id;
-  })();
+  // After regeneration we override the props locally so the UI updates
+  // immediately without waiting for a parent refetch.
+  const [localKey, setLocalKey] = useState<string | null>(null);
+  const [localPublicId, setLocalPublicId] = useState<string | null>(null);
+  const [isRegenerating, setIsRegenerating] = useState(false);
+
+  const effectiveStreamKey = localKey ?? (privateStreamKey || streamKey || "");
+  const effectiveStreamId = localPublicId ?? (publicStreamId || externalStreamId || "");
+  const hasKey = effectiveStreamKey.length > 0;
+  const hasShareId = effectiveStreamId.length > 0;
+
   const { toast } = useToast();
-  const [keyVisible, setKeyVisible] = useState(true); // Key visible by default on the dashboard
+  // Key hidden by default — it grants full broadcast access if leaked.
+  const [keyVisible, setKeyVisible] = useState(false);
   const [keyJustCopied, setKeyJustCopied] = useState(false);
   const [idJustCopied, setIdJustCopied] = useState(false);
   const [linkJustCopied, setLinkJustCopied] = useState(false);
@@ -196,8 +193,57 @@ export default function StreamDashboard({
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
   
+  // Regenerate the stream key + public ID. The server invalidates the old
+  // ones and returns fresh credentials.
+  const handleRegenerateKey = async () => {
+    if (!streamId) return;
+    setIsRegenerating(true);
+    try {
+      const result = await regenerateStreamKey(streamId);
+      setLocalKey(result.privateStreamKey || result.streamKey);
+      setLocalPublicId(result.publicStreamId || result.externalStreamId);
+      setKeyVisible(false);
+      toast({
+        title: "Stream Key Regenerated",
+        description:
+          "Your old key and share link no longer work. Update your broadcast software with the new key.",
+      });
+    } catch (err) {
+      console.error("Failed to regenerate stream key:", err);
+      toast({
+        title: "Regenerate Failed",
+        description:
+          err instanceof Error ? err.message : "Could not regenerate the stream key.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRegenerating(false);
+    }
+  };
+
+  // Native share sheet when available (mobile + some desktop browsers).
+  const canNativeShare =
+    typeof navigator !== "undefined" && typeof navigator.share === "function";
+
+  const nativeShare = async () => {
+    if (!hasShareId) return;
+    try {
+      await navigator.share({
+        title: title || "Live stream on Traxx",
+        text: description || `Join ${title || "the stream"} live on Traxx`,
+        url: getShareableLink(),
+      });
+    } catch (err) {
+      // User dismissed or browser blocked — silently ignore AbortError.
+      if ((err as DOMException)?.name !== "AbortError") {
+        console.warn("Native share failed:", err);
+      }
+    }
+  };
+
   // Handle copying stream key
   const copyStreamKey = () => {
+    if (!hasKey) return;
     navigator.clipboard.writeText(effectiveStreamKey).then(() => {
       setKeyJustCopied(true);
       setTimeout(() => setKeyJustCopied(false), 3000);
@@ -218,6 +264,7 @@ export default function StreamDashboard({
   
   // Handle copying stream ID
   const copyStreamId = () => {
+    if (!hasShareId) return;
     navigator.clipboard.writeText(effectiveStreamId).then(() => {
       setIdJustCopied(true);
       setTimeout(() => setIdJustCopied(false), 3000);
@@ -236,27 +283,25 @@ export default function StreamDashboard({
     });
   };
   
-  // Generate shareable link
+  // Generate shareable link. Returns an empty string when no public ID is
+  // available so callers can disable the UI instead of copying a broken URL.
   const getShareableLink = () => {
-    // Check if we have a valid stream ID
-    if (!effectiveStreamId || effectiveStreamId === "") {
-      console.warn("No effectiveStreamId available to create shareable link");
-      
-      // Return a base URL if no ID is available (includes the slash for clarity)
-      const baseUrl = `${window.location.origin}/stream/`;
-      console.log("Generated base URL (no ID):", baseUrl);
-      return baseUrl;
-    }
-    
-    // Generate and log the complete link with the stream ID
-    const link = `${window.location.origin}/stream/${effectiveStreamId}`;
-    console.log("Generated shareable link:", link);
-    return link;
+    if (!hasShareId) return "";
+    return `${window.location.origin}/stream/${effectiveStreamId}`;
   };
-  
+
   // Handle copying shareable link
   const copyShareableLink = () => {
-    navigator.clipboard.writeText(getShareableLink()).then(() => {
+    const link = getShareableLink();
+    if (!link) {
+      toast({
+        title: "No share link yet",
+        description: "The stream needs a public ID before it can be shared.",
+        variant: "destructive",
+      });
+      return;
+    }
+    navigator.clipboard.writeText(link).then(() => {
       setLinkJustCopied(true);
       setTimeout(() => setLinkJustCopied(false), 3000);
       
@@ -351,30 +396,65 @@ export default function StreamDashboard({
                   </h3>
                   
                   <div className="flex gap-2">
-                    <Input 
-                      type={keyVisible ? "text" : "password"} 
+                    <Input
+                      type={keyVisible ? "text" : "password"}
                       value={effectiveStreamKey || "No stream key available"}
-                      readOnly 
+                      readOnly
                       className="font-mono"
+                      disabled={!hasKey}
                     />
-                    
-                    <Button 
-                      variant="outline" 
+
+                    <Button
+                      variant="outline"
                       size="icon"
                       onClick={() => setKeyVisible(!keyVisible)}
+                      disabled={!hasKey}
+                      title={keyVisible ? "Hide stream key" : "Show stream key"}
                     >
-                      <Shield className="h-4 w-4" />
+                      {keyVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </Button>
-                    
-                    <Button 
-                      variant="outline" 
+
+                    <Button
+                      variant="outline"
                       size="icon"
                       onClick={copyStreamKey}
+                      disabled={!hasKey}
+                      title="Copy stream key"
                     >
                       {keyJustCopied ? <CheckCircle className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
                     </Button>
+
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          disabled={!streamId || isRegenerating}
+                          title="Regenerate stream key"
+                        >
+                          <RefreshCw className={`h-4 w-4 ${isRegenerating ? "animate-spin" : ""}`} />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Regenerate stream key?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            This will immediately invalidate your current stream key
+                            <strong> and your current share link</strong>. Anyone using the
+                            old link will be disconnected, and you'll need to update your
+                            broadcast software (e.g. OBS) with the new key.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={handleRegenerateKey}>
+                            Regenerate
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </div>
-                  
+
                   <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                     <Shield className="h-3 w-3 text-red-500" />
                     Keep your stream key private! It gives full broadcasting access to your channel.
@@ -389,16 +469,19 @@ export default function StreamDashboard({
                   </h3>
                   
                   <div className="flex gap-2">
-                    <Input 
-                      value={effectiveStreamId || "No stream ID available"} 
-                      readOnly 
+                    <Input
+                      value={effectiveStreamId || "No stream ID available"}
+                      readOnly
                       className="font-mono"
+                      disabled={!hasShareId}
                     />
-                    
-                    <Button 
-                      variant="outline" 
+
+                    <Button
+                      variant="outline"
                       size="icon"
                       onClick={copyStreamId}
+                      disabled={!hasShareId}
+                      title="Copy stream ID"
                     >
                       {idJustCopied ? <CheckCircle className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
                     </Button>
@@ -416,18 +499,33 @@ export default function StreamDashboard({
                   </h3>
                   
                   <div className="flex gap-2">
-                    <Input 
-                      value={getShareableLink()} 
-                      readOnly 
+                    <Input
+                      value={getShareableLink() || "No share link yet"}
+                      readOnly
+                      disabled={!hasShareId}
                     />
-                    
-                    <Button 
-                      variant="outline" 
+
+                    <Button
+                      variant="outline"
                       size="icon"
                       onClick={copyShareableLink}
+                      disabled={!hasShareId}
+                      title="Copy share link"
                     >
                       {linkJustCopied ? <CheckCircle className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
                     </Button>
+
+                    {canNativeShare && (
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={nativeShare}
+                        disabled={!hasShareId}
+                        title="Share via..."
+                      >
+                        <Share2 className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
                   
                   <p className="text-xs text-muted-foreground mt-1">

@@ -1429,6 +1429,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // End a stream
+  /**
+   * Regenerate a stream key + public ID for an existing stream.
+   * Owner-only. Invalidates the old key/share link and returns the new ones.
+   * Marks the stream offline so existing viewers reconnect against the new ID.
+   */
+  app.post("/api/streams/:id/regenerate-key", async (req, res) => {
+    if (!req.isAuthenticated() || !req.user?.id) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const streamId = parseInt(req.params.id);
+    if (isNaN(streamId)) {
+      return res.status(400).json({ success: false, message: "Invalid stream ID" });
+    }
+
+    try {
+      const stream = await storage.getStream(streamId);
+      if (!stream) {
+        return res.status(404).json({ success: false, message: "Stream not found" });
+      }
+
+      if (stream.userId !== req.user.id) {
+        return res.status(403).json({
+          success: false,
+          message: "You can only regenerate keys for your own streams",
+        });
+      }
+
+      // Generate a fresh private key and matching public ID
+      const newStreamKey = generateStreamKey(req.user.id);
+      const newPublicId = generatePublicStreamId(newStreamKey);
+
+      // Persist new credentials. Force the stream offline so viewers using the
+      // old share link drop and have to rejoin with the new one.
+      await storage.updateStream(streamId, {
+        streamKey: newStreamKey,
+        externalStreamId: newPublicId,
+        isLive: false,
+      });
+
+      // Clean up in-memory tracking so the old public ID and any numeric-ID
+      // entries stop resolving — old viewer links must 404 after rotation.
+      const oldPublicId = stream.externalStreamId;
+      if (oldPublicId) {
+        webrtcActiveStreams.delete(oldPublicId);
+        activeStreams.delete(oldPublicId);
+      }
+      webrtcActiveStreams.delete(streamId.toString());
+      activeStreams.delete(streamId.toString());
+
+      return res.json({
+        success: true,
+        streamId,
+        streamKey: newStreamKey,
+        privateStreamKey: newStreamKey,
+        externalStreamId: newPublicId,
+        publicStreamId: newPublicId,
+        shareUrl: `${req.protocol}://${req.get("host")}/stream/${newPublicId}`,
+        message:
+          "Stream key regenerated. The previous key and share link no longer work.",
+      });
+    } catch (error) {
+      console.error("Error regenerating stream key:", error);
+      return res
+        .status(500)
+        .json({ success: false, message: "Failed to regenerate stream key" });
+    }
+  });
+
   app.post("/api/streams/:id/end", async (req, res) => {
     try {
       const streamId = parseInt(req.params.id);
@@ -1442,13 +1511,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Stream not found" });
       }
       
-      // Check authorization (only stream owner can end it)
-      if (req.isAuthenticated() && req.user?.id !== stream.userId) {
+      // Check authorization (only stream owner can end it). Previously this
+      // only rejected *authenticated* non-owners, which let unauthenticated
+      // callers silently bypass the check and end any stream.
+      if (!req.isAuthenticated() || req.user?.id !== stream.userId) {
         return res.status(403).json({ message: "Not authorized to end this stream" });
       }
-      
+
       // Mark the stream as not live and set the end time
-      const updatedStream = await storage.updateStream(streamId, { 
+      const updatedStream = await storage.updateStream(streamId, {
         isLive: false,
         endedAt: new Date()
       });
@@ -1474,8 +1545,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Stream not found" });
       }
       
-      // Check authorization (only stream owner can delete it)
-      if (req.isAuthenticated() && req.user?.id !== stream.userId) {
+      // Check authorization (only stream owner can delete it). Same bug as
+      // /end — must reject unauthenticated callers, not just authenticated
+      // non-owners.
+      if (!req.isAuthenticated() || req.user?.id !== stream.userId) {
         return res.status(403).json({ message: "Not authorized to delete this stream" });
       }
       
@@ -2053,38 +2126,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log(`Validating stream key for stream ${streamIdNumber} with userId ${stream.userId}`);
       
-      // Possible validation scenarios:
-      // 1. The key is stored in the stream record and matches exactly (legacy)
-      // 2. The key passes crypto validation for the stream's user ID (preferred)
-      
-      // First check if we have an exact match with stored key
-      const exactMatch = stream.streamKey === streamKey;
-      
-      // Then check if the key is cryptographically valid for the user
-      let cryptoValid = false;
-      if (stream.userId) {
-        cryptoValid = validateStreamKey(streamKey, stream.userId);
-        
-        // If we have a key that passes validation but doesn't match the stored key,
-        // update the stored key (if stream is not currently live)
-        if (cryptoValid && !exactMatch && !stream.isLive) {
-          try {
-            await storage.updateStream(streamIdNumber, { streamKey });
-            console.log(`Updated stream ${streamIdNumber} with validated key`);
-          } catch (updateError) {
-            console.error(`Failed to update stream key: ${updateError}`);
-            // Non-critical error, continue with validation
-          }
-        }
-      }
-      
-      const isValid = exactMatch || cryptoValid;
-      
-      console.log(`Stream key validation result: exactMatch=${exactMatch}, cryptoValid=${cryptoValid}, isValid=${isValid}`);
-      
-      return res.json({ 
+      // Strict validation: the key MUST exactly match the one currently
+      // stored for this stream. We deliberately do NOT accept "any
+      // crypto-valid key for this user" or auto-rewrite the stored key,
+      // because that would let a rotated/revoked key be re-bound and defeat
+      // POST /api/streams/:id/regenerate-key.
+      const isValid = !!stream.streamKey && stream.streamKey === streamKey;
+
+      console.log(`Stream key validation result: isValid=${isValid}`);
+
+      return res.json({
         valid: isValid,
-        message: isValid ? "Stream key is valid" : "Invalid stream key" 
+        message: isValid ? "Stream key is valid" : "Invalid stream key",
       });
     } catch (error) {
       console.error("Error validating stream key:", error);
@@ -2153,30 +2206,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`Fallback: found ${streams.length} total streams`);
       }
       
-      // Try to find a matching stream first by exact key match, then by crypto validation
-      let matchingStream = streams.find(stream => stream.streamKey === streamKey);
-      
-      if (!matchingStream) {
-        for (const stream of streams) {
-          if (stream.userId && validateStreamKey(streamKey, stream.userId)) {
-            console.log(`Found stream with cryptographically validated key for user: ${stream.userId}`);
-            matchingStream = stream;
-            
-            // If the stream is not currently live, update the stored key to match the validated one
-            if (!stream.isLive) {
-              try {
-                await storage.updateStream(stream.id, { streamKey });
-                console.log(`Updated stream ${stream.id} with validated key`);
-              } catch (updateError) {
-                console.error(`Failed to update stream key: ${updateError}`);
-                // Non-critical error, continue with validation
-              }
-            }
-            break;
-          }
-        }
-      }
-      
+      // Strict match against the stored key only. We do NOT fall back to
+      // generic HMAC validity for the same user — that would let a rotated /
+      // revoked key still bind to a stream and defeat key regeneration. The
+      // stored key itself is HMAC-signed at issue time, so exact match is
+      // the right authorization check here.
+      const matchingStream = streams.find(stream => stream.streamKey === streamKey);
+
       if (!matchingStream) {
         console.log("No matching stream found for the provided key");
         return res.status(401).json({ 
