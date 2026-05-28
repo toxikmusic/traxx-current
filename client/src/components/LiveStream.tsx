@@ -429,10 +429,50 @@ const LiveStream = ({ initialStreamId, userId, userName }: LiveStreamProps) => {
         
         // When we get the remote stream
         peer.on("stream", (stream) => {
-          console.log("Received remote stream from host");
-          if (remoteVideoRef.current) {
-            remoteVideoRef.current.srcObject = stream;
-          }
+          console.log("Received remote stream from host", {
+            videoTracks: stream.getVideoTracks().length,
+            audioTracks: stream.getAudioTracks().length,
+          });
+          const mediaEl = remoteVideoRef.current as HTMLMediaElement | null;
+          if (!mediaEl) return;
+
+          mediaEl.srcObject = stream;
+          // Ensure correct playback flags for browsers
+          (mediaEl as HTMLVideoElement).playsInline = true;
+          mediaEl.autoplay = true;
+          mediaEl.muted = false;
+          mediaEl.volume = 1.0;
+
+          const tryPlay = () => mediaEl.play();
+
+          // Browsers block autoplay-with-sound unless the user has interacted
+          // with the page. If the unmuted play() rejects, fall back to muted
+          // autoplay so the stream still starts, then prompt the viewer to
+          // unmute on first interaction.
+          tryPlay().catch((err) => {
+            console.warn("Unmuted autoplay blocked, falling back to muted:", err);
+            mediaEl.muted = true;
+            mediaEl.play().catch((mutedErr) => {
+              console.error("Muted autoplay also failed:", mutedErr);
+            });
+
+            toast({
+              title: "Tap to enable sound",
+              description: "Your browser blocked audio autoplay. Click the stream to unmute.",
+            });
+
+            const unmuteOnGesture = () => {
+              mediaEl.muted = false;
+              mediaEl.volume = 1.0;
+              mediaEl.play().catch(() => {});
+              window.removeEventListener("click", unmuteOnGesture);
+              window.removeEventListener("touchstart", unmuteOnGesture);
+              window.removeEventListener("keydown", unmuteOnGesture);
+            };
+            window.addEventListener("click", unmuteOnGesture, { once: true });
+            window.addEventListener("touchstart", unmuteOnGesture, { once: true });
+            window.addEventListener("keydown", unmuteOnGesture, { once: true });
+          });
         });
         
         // Handle errors
