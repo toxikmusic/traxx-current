@@ -22,7 +22,7 @@ export const users = pgTable("users", {
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
-  email: false, // Added email to the insert schema
+  email: true, // Required by the users table (NOT NULL UNIQUE)
   displayName: true,
   bio: true,
   profileImageUrl: true,
