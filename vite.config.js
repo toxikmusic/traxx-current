@@ -67,6 +67,7 @@ export default defineConfig({
       '*.kirk.replit.dev',
       '*-00-*.kirk.replit.dev',
       '*-*-*-*-*-00-*.kirk.replit.dev',
+      'traxx.club',
       // Adding specific host from environment variable if available
       ...(process.env.VITE_SPECIFIC_HOST ? [process.env.VITE_SPECIFIC_HOST] : []),
       // Additional hosts from local config if available
