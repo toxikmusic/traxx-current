@@ -30,8 +30,35 @@ interface AudioPlayerContextType {
   formatTime: (seconds: number) => string;
 }
 
-// This key will be used for saving player state in localStorage
+// This key will be used for saving player state in sessionStorage
+// sessionStorage persists across navigation/refresh during the tab session,
+// but is automatically cleared when the user closes the site/tab.
 const PLAYER_STATE_KEY = "traxx_player_state";
+
+// Safe accessor for sessionStorage (handles private mode / SSR edge cases)
+const playerStorage = {
+  get(): string | null {
+    try {
+      return typeof window !== "undefined" ? window.sessionStorage.getItem(PLAYER_STATE_KEY) : null;
+    } catch {
+      return null;
+    }
+  },
+  set(value: string) {
+    try {
+      if (typeof window !== "undefined") window.sessionStorage.setItem(PLAYER_STATE_KEY, value);
+    } catch {
+      /* ignore quota / access errors */
+    }
+  },
+  clear() {
+    try {
+      if (typeof window !== "undefined") window.sessionStorage.removeItem(PLAYER_STATE_KEY);
+    } catch {
+      /* ignore */
+    }
+  },
+};
 
 const AudioPlayerContext = createContext<AudioPlayerContextType | undefined>(undefined);
 
@@ -126,19 +153,22 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
     };
   }, []);
   
-  // Handle player initialization from localStorage
+  // Handle player initialization from storage
   useEffect(() => {
     try {
-      // Load volume first as it's always needed
+      // Volume is a persistent user preference, kept in localStorage
       const savedVolume = localStorage.getItem("traxx_volume");
       if (savedVolume) {
         const parsedVolume = parseInt(savedVolume);
         setVolume(parsedVolume);
         setIsMuted(parsedVolume === 0);
       }
-      
-      // Try to load saved player state
-      const savedState = localStorage.getItem(PLAYER_STATE_KEY);
+
+      // Migration: remove any stale player state previously written to localStorage
+      try { localStorage.removeItem(PLAYER_STATE_KEY); } catch { /* ignore */ }
+
+      // Player state itself lives in sessionStorage so it dumps when the site is exited
+      const savedState = playerStorage.get();
       if (savedState) {
         const parsedState = JSON.parse(savedState);
         
@@ -183,7 +213,9 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
     }
   }, []);
   
-  // Save player state to localStorage when it changes
+  // Save player state to sessionStorage when it changes
+  // This keeps tracks playing while navigating the site, but the data is
+  // wiped automatically by the browser when the tab/site is closed.
   useEffect(() => {
     try {
       const stateToSave = {
@@ -196,12 +228,25 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
         isShuffling,
         isMinimized
       };
-      
-      localStorage.setItem(PLAYER_STATE_KEY, JSON.stringify(stateToSave));
+
+      playerStorage.set(JSON.stringify(stateToSave));
     } catch (error) {
       console.error("Error saving player state:", error);
     }
   }, [currentTrack, isPlaying, currentTime, queue, history, repeatMode, isShuffling, isMinimized]);
+
+  // Belt-and-suspenders: clear the player state explicitly when the site is exited.
+  // sessionStorage already does this on tab close, but this also handles cases like
+  // explicit logout flows where we want to drop in-flight playback state.
+  useEffect(() => {
+    const handleUnload = () => {
+      playerStorage.clear();
+    };
+    window.addEventListener("pagehide", handleUnload);
+    return () => {
+      window.removeEventListener("pagehide", handleUnload);
+    };
+  }, []);
   
   // Save volume separately when it changes
   useEffect(() => {
