@@ -1331,6 +1331,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Create a new post
+  app.post("/api/posts", async (req, res) => {
+    if (!req.isAuthenticated() || !req.user?.id) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    try {
+      // Always trust the authenticated user's id — never let the client pick
+      // who they're posting as.
+      const postData = insertPostSchema.parse({
+        ...req.body,
+        userId: req.user.id,
+      });
+
+      const post = await storage.createPost(postData);
+      res.status(201).json(post);
+    } catch (error) {
+      console.error("Error creating post:", error);
+      res.status(400).json({
+        message: "Invalid post data",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
   // Get posts by user
   app.get("/api/posts/user/:userId", async (req, res) => {
     try {
