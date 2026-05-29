@@ -22,6 +22,8 @@ import { regenerateStreamKey } from "@/lib/api";
 import { User } from "@shared/schema";
 import { useLocation } from "wouter";
 import { io, Socket } from 'socket.io-client';
+import SimplePeer from "simple-peer";
+import { createWebSocket } from "@/lib/websocketUtils";
 
 interface ChatMessage {
   id: string;
@@ -107,6 +109,18 @@ export default function StreamDashboard({
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState("info");
   const socketRef = useRef<Socket | null>(null);
+
+  // --- Live WebRTC broadcasting (host side) ---
+  // The dashboard is the streamer's broadcast surface. It captures the
+  // camera/mic, registers as the host on the /ws signaling server, and sends
+  // its media to each viewer that joins via a SimplePeer connection.
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const broadcastWsRef = useRef<WebSocket | null>(null);
+  const broadcastWsCleanupRef = useRef<(() => void) | null>(null);
+  const peersRef = useRef<Record<string, any>>({});
+  const [isBroadcasting, setIsBroadcasting] = useState(false);
+  const [broadcastError, setBroadcastError] = useState<string | null>(null);
   
   // Initialize Socket.IO connection and chat when component mounts or streamId changes
   useEffect(() => {
@@ -157,6 +171,208 @@ export default function StreamDashboard({
     };
   }, [streamId, user, effectiveStreamKey]);
   
+  // Start the live WebRTC broadcast: capture media, register as host on the
+  // signaling server, and answer each viewer that joins. This runs once the
+  // stream is live so viewers actually receive video/audio instead of an
+  // offline placeholder.
+  useEffect(() => {
+    // Only WebRTC streams broadcast peer-to-peer from the browser. HLS /
+    // Cloudflare streams publish through other transports, so skip capture.
+    if (!streamId || !isLive || protocol !== "webrtc") return;
+
+    let cancelled = false;
+
+    const handleViewerJoined = ({ viewerId }: { viewerId: string }) => {
+      if (!localStreamRef.current || peersRef.current[viewerId]) return;
+      try {
+        const peer = new SimplePeer({
+          initiator: true,
+          trickle: true,
+          stream: localStreamRef.current,
+          config: {
+            iceServers: [
+              { urls: "stun:stun.l.google.com:19302" },
+              { urls: "stun:global.stun.twilio.com:3478" },
+            ],
+          },
+        });
+        peersRef.current[viewerId] = peer;
+
+        peer.on("signal", (data: any) => {
+          broadcastWsRef.current?.send(
+            JSON.stringify({
+              type: "stream-offer",
+              data: { streamId: String(streamId), description: data, viewerId },
+            })
+          );
+        });
+        peer.on("close", () => {
+          delete peersRef.current[viewerId];
+        });
+        peer.on("error", (err: Error) => {
+          console.error("WebRTC error with viewer:", viewerId, err);
+          delete peersRef.current[viewerId];
+        });
+      } catch (err) {
+        console.error("Error creating host peer connection:", err);
+      }
+    };
+
+    const handleViewerLeft = ({ viewerId }: { viewerId: string }) => {
+      if (peersRef.current[viewerId]) {
+        peersRef.current[viewerId].destroy();
+        delete peersRef.current[viewerId];
+      }
+    };
+
+    const handleStreamAnswer = ({
+      viewerId,
+      description,
+    }: {
+      viewerId: string;
+      description: any;
+    }) => {
+      if (peersRef.current[viewerId]) {
+        peersRef.current[viewerId].signal(description);
+      }
+    };
+
+    const handleIceCandidate = ({
+      from,
+      candidate,
+    }: {
+      from: string;
+      candidate: any;
+    }) => {
+      if (peersRef.current[from]) {
+        peersRef.current[from].signal({ type: "candidate", candidate });
+      }
+    };
+
+    const start = async () => {
+      try {
+        const wantVideo = streamType === "video";
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: wantVideo,
+          audio: true,
+        });
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        localStreamRef.current = stream;
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = stream;
+        }
+
+        const { socket, cleanup } = createWebSocket({
+          endpoint: "/ws",
+          timeout: 5000,
+        });
+        if (!socket) {
+          setBroadcastError("Could not connect to the streaming server.");
+          return;
+        }
+        broadcastWsRef.current = socket;
+        broadcastWsCleanupRef.current = cleanup;
+
+        socket.onopen = () => {
+          socket.send(
+            JSON.stringify({
+              type: "host-stream",
+              data: { streamId: String(streamId) },
+            })
+          );
+          if (!cancelled) {
+            setIsBroadcasting(true);
+            setBroadcastError(null);
+          }
+        };
+
+        socket.onmessage = (event: MessageEvent) => {
+          try {
+            const message = JSON.parse(event.data);
+            switch (message.type) {
+              case "viewer-joined":
+                handleViewerJoined(message.data);
+                break;
+              case "viewer-left":
+                handleViewerLeft(message.data);
+                break;
+              case "stream-answer":
+                handleStreamAnswer(message.data);
+                break;
+              case "ice-candidate":
+                handleIceCandidate(message.data);
+                break;
+            }
+          } catch (err) {
+            console.error("Error processing signaling message:", err);
+          }
+        };
+
+        socket.onerror = () => {
+          if (!cancelled) {
+            setBroadcastError("Streaming connection error. Please refresh.");
+          }
+        };
+
+        socket.onclose = () => {
+          if (!cancelled) {
+            setIsBroadcasting(false);
+            setBroadcastError(
+              "Streaming connection lost. Please refresh to resume broadcasting."
+            );
+          }
+        };
+      } catch (err) {
+        console.error("Failed to start broadcast:", err);
+        if (!cancelled) {
+          setBroadcastError(
+            err instanceof DOMException && err.name === "NotAllowedError"
+              ? "Camera/microphone access was denied. Allow access to go live."
+              : "Could not access your camera or microphone."
+          );
+        }
+      }
+    };
+
+    start();
+
+    return () => {
+      cancelled = true;
+      if (broadcastWsRef.current?.readyState === WebSocket.OPEN) {
+        broadcastWsRef.current.send(
+          JSON.stringify({
+            type: "end-stream",
+            data: { streamId: String(streamId) },
+          })
+        );
+      }
+      Object.values(peersRef.current).forEach((peer) => {
+        try {
+          peer.destroy();
+        } catch {
+          /* noop */
+        }
+      });
+      peersRef.current = {};
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach((t) => t.stop());
+        localStreamRef.current = null;
+      }
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = null;
+      }
+      if (broadcastWsCleanupRef.current) {
+        broadcastWsCleanupRef.current();
+        broadcastWsCleanupRef.current = null;
+      }
+      broadcastWsRef.current = null;
+      setIsBroadcasting(false);
+    };
+  }, [streamId, isLive, streamType, protocol]);
+
   // Initialize chat when tab is selected
   useEffect(() => {
     if (activeTab === "chat") {
@@ -659,10 +875,44 @@ export default function StreamDashboard({
             
             <Separator />
             
-            {/* Stream Preview Placeholder */}
-            <div className="bg-zinc-900 aspect-video rounded-md flex flex-col items-center justify-center text-center p-4">
-              <h3 className="text-white mb-2">Stream Preview</h3>
-              <p className="text-zinc-400 text-sm">Preview of your stream will appear here when you start broadcasting</p>
+            {/* Live Stream Preview */}
+            <div className="relative bg-zinc-900 aspect-video rounded-md overflow-hidden flex flex-col items-center justify-center text-center p-4">
+              <video
+                ref={localVideoRef}
+                autoPlay
+                playsInline
+                muted
+                className={`absolute inset-0 w-full h-full object-cover ${
+                  isBroadcasting && streamType === "video" ? "block" : "hidden"
+                }`}
+              />
+              {broadcastError ? (
+                <div className="relative z-10">
+                  <h3 className="text-white mb-2">Broadcast Error</h3>
+                  <p className="text-red-400 text-sm">{broadcastError}</p>
+                </div>
+              ) : !isBroadcasting ? (
+                <div className="relative z-10">
+                  <h3 className="text-white mb-2">Starting Broadcast…</h3>
+                  <p className="text-zinc-400 text-sm">
+                    Connecting your camera and microphone to the stream.
+                  </p>
+                </div>
+              ) : streamType !== "video" ? (
+                <div className="relative z-10">
+                  <Radio className="h-10 w-10 text-red-500 mx-auto mb-2 animate-pulse" />
+                  <h3 className="text-white mb-1">Audio Broadcast Live</h3>
+                  <p className="text-zinc-400 text-sm">
+                    Your microphone audio is streaming to viewers.
+                  </p>
+                </div>
+              ) : null}
+              {isBroadcasting && (
+                <div className="absolute top-2 left-2 z-10 flex items-center gap-1 bg-black/60 px-2 py-1 rounded">
+                  <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+                  <span className="text-xs text-white font-medium">LIVE</span>
+                </div>
+              )}
             </div>
             
             <div className="space-y-2">
