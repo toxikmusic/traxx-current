@@ -4,6 +4,7 @@
 Traxx is a music streaming and community platform for musicians to connect with fans, live stream performances, upload tracks, and share content. Built with React + Express + PostgreSQL.
 
 ## Recent Changes
+- 2026-05-30: Fixed "Go Live" dashboard showing empty Stream ID / "No share link" — getStreamById now unwraps the `{success, stream}` envelope, and the go-live refetch effect merges into prior state instead of overwriting credentials with empty strings
 - 2026-02-22: Initial setup - fixed database config, Vite HMR issues, import path errors, removed stale compiled JS files
 
 ## Project Architecture

@@ -686,7 +686,7 @@ export default function StreamDashboard({
                   
                   <div className="flex gap-2">
                     <Input
-                      value={effectiveStreamId || "No stream ID available"}
+                      value={effectiveStreamId}
                       readOnly
                       className="font-mono"
                       disabled={!hasShareId}

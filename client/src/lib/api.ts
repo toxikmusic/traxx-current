@@ -110,7 +110,10 @@ export async function getActiveStreamsByUser(userId: number): Promise<Stream[]> 
 }
 
 export async function getStreamById(streamId: number | string): Promise<ExtendedStream> {
-  return await apiRequest<ExtendedStream>(`/api/streams/${streamId}`);
+  const res = await apiRequest<any>(`/api/streams/${streamId}`);
+  // The endpoint returns { success, stream: {...} }. Unwrap it so callers get
+  // the stream object directly (with externalStreamId, streamKey, etc.).
+  return (res && res.stream ? res.stream : res) as ExtendedStream;
 }
 
 export async function createStream(data: Partial<Stream> & {

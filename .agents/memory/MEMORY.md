@@ -1,0 +1,1 @@
+- [Stream API response shape](stream-api-response-shape.md) — GET stream endpoints return `{success, stream}`; client helpers must unwrap, and go-live's refetch must merge (never clobber ids/keys with empty).

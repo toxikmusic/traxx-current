@@ -552,23 +552,27 @@ export default function GoLivePage() {
         const effectiveStreamKey = streamData.streamKey || streamData.privateStreamKey || '';
         const effectiveStreamId = streamData.externalStreamId || streamData.publicStreamId || '';
         
-        // Update the stream details with both naming conventions for maximum compatibility
-        setStreamDetails({
+        // Update the stream details with both naming conventions for maximum
+        // compatibility. Merge with previous state and never replace already
+        // known credentials/ids with empty values (e.g. when this refetch runs
+        // right after handleGoLive has already populated them).
+        setStreamDetails(prev => ({
+          ...prev,
           // Primary field names
-          streamKey: effectiveStreamKey,
-          externalStreamId: effectiveStreamId,
+          streamKey: effectiveStreamKey || prev.streamKey,
+          externalStreamId: effectiveStreamId || prev.externalStreamId,
           // Alternative field names
-          privateStreamKey: effectiveStreamKey,
-          publicStreamId: effectiveStreamId,
+          privateStreamKey: effectiveStreamKey || prev.privateStreamKey,
+          publicStreamId: effectiveStreamId || prev.publicStreamId,
           // Other fields
-          title: streamData.title || '',
-          description: streamData.description || '',
-          isLive: streamData.isLive || false,
-          viewerCount: streamData.viewerCount || 0,
-          startTime: streamData.startedAt ? new Date(streamData.startedAt) : new Date(),
-          protocol: (streamData.protocol as 'webrtc' | 'hls' | 'cloudflare') || 'webrtc',
-          streamType: (streamData.streamType as 'video' | 'audio') || streamType
-        });
+          title: streamData.title || prev.title || '',
+          description: streamData.description || prev.description || '',
+          isLive: streamData.isLive ?? prev.isLive ?? false,
+          viewerCount: streamData.viewerCount ?? prev.viewerCount ?? 0,
+          startTime: streamData.startedAt ? new Date(streamData.startedAt) : (prev.startTime || new Date()),
+          protocol: (streamData.protocol as 'webrtc' | 'hls' | 'cloudflare') || prev.protocol || 'webrtc',
+          streamType: (streamData.streamType as 'video' | 'audio') || prev.streamType || streamType
+        }));
         
         // Log effective values that will be used
         console.log("Using effective stream keys:", {
