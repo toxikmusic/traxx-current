@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
-import { Send, Users, Volume2, VolumeX, BarChart3 } from "lucide-react";
+import { Send, Users, Volume2, VolumeX, BarChart3, BadgeCheck } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
@@ -75,25 +75,35 @@ export default function StreamPage() {
     enabled: !!streamId || !!externalStreamId,
     queryFn: async ({ queryKey }) => {
       // Determine if we're looking up by numeric ID or external ID
+      let response: Response;
       if (streamId) {
         // Numeric ID lookup
-        const response = await fetch(`/api/streams/${streamId}`);
-        if (!response.ok) throw new Error('Stream not found');
-        return await response.json();
+        response = await fetch(`/api/streams/${streamId}`);
       } else if (externalStreamId) {
         // External ID (public ID) lookup
-        const response = await fetch(`/api/streams/public/${externalStreamId}`);
-        if (!response.ok) throw new Error('Stream not found');
-        return await response.json();
+        response = await fetch(`/api/streams/public/${externalStreamId}`);
+      } else {
+        throw new Error('Invalid stream ID');
       }
-      throw new Error('Invalid stream ID');
+      if (!response.ok) throw new Error('Stream not found');
+      const data = await response.json();
+      // Both endpoints wrap the stream as { success, stream }. Unwrap it so
+      // callers can read stream.isLive / stream.userId / stream.id directly.
+      return (data && data.stream) ? data.stream : data;
     }
   });
   
   // Query for streamer info
   const { data: streamer, isLoading: streamerLoading } = useQuery<User>({
     queryKey: ['/api/users', stream?.userId],
-    enabled: !!stream?.userId
+    enabled: !!stream?.userId,
+    queryFn: async () => {
+      const response = await fetch(`/api/users/${stream!.userId}`);
+      if (!response.ok) throw new Error('Streamer not found');
+      const data = await response.json();
+      // /api/users/:id returns the user directly, but tolerate a wrapper too.
+      return (data && data.user) ? data.user : data;
+    }
   });
   
   // Show a toast when stream doesn't exist
@@ -417,7 +427,7 @@ export default function StreamPage() {
                   ) : (
                     stream?.isLive || streamStatus.isLive ? (
                       <LiveStream 
-                        initialStreamId={streamId?.toString()}
+                        initialStreamId={params?.id}
                         userId={user?.id}
                         userName={user?.displayName}
                       />
@@ -474,14 +484,31 @@ export default function StreamPage() {
                     <>
                       <h1 className="text-xl font-bold">{displayedStream.title}</h1>
                       <div className="flex items-center justify-between mt-2">
-                        <div className="flex items-start space-x-2">
-                          <Avatar className="w-10 h-10">
+                        <div className="flex items-start space-x-3">
+                          <Avatar className="w-12 h-12">
                             <AvatarImage src={displayedStreamer.profileImageUrl || undefined} />
-                            <AvatarFallback>{displayedStreamer.displayName.charAt(0)}</AvatarFallback>
+                            <AvatarFallback>
+                              {(displayedStreamer.displayName || displayedStreamer.username || "?").charAt(0).toUpperCase()}
+                            </AvatarFallback>
                           </Avatar>
                           <div>
-                            <h2 className="font-medium">{displayedStreamer.displayName}</h2>
-                            <p className="text-sm text-gray-400">{displayedStreamer.followerCount ? displayedStreamer.followerCount.toLocaleString() : '0'} followers</p>
+                            <div className="flex items-center gap-1.5">
+                              <h2 className="font-medium">
+                                {displayedStreamer.displayName || displayedStreamer.username}
+                              </h2>
+                              {displayedStreamer.isVerified && (
+                                <BadgeCheck size={16} className="text-primary" aria-label="Verified" />
+                              )}
+                            </div>
+                            {displayedStreamer.username && (
+                              <p className="text-xs text-gray-500">@{displayedStreamer.username}</p>
+                            )}
+                            <p className="text-sm text-gray-400">
+                              {(displayedStreamer.followerCount ?? 0).toLocaleString()} followers
+                            </p>
+                            {displayedStreamer.bio && (
+                              <p className="text-sm text-gray-300 mt-1 max-w-md">{displayedStreamer.bio}</p>
+                            )}
                           </div>
                         </div>
                         <Button 
